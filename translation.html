@@ -1,0 +1,471 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Real-Time Speech Translation System</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    background: #eef2f7;
+    margin: 0;
+    padding: 30px;
+}
+
+.container {
+    max-width: 850px;
+    margin: auto;
+    background: white;
+    padding: 30px;
+    border-radius: 15px;
+    box-shadow: 0 4px 15px #0002;
+}
+
+h1 {
+    color: #183b68;
+    text-align: center;
+}
+
+.subtitle {
+    text-align: center;
+    color: #555;
+}
+
+.settings {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    margin-top: 25px;
+}
+
+.settings div {
+    flex: 1;
+    min-width: 200px;
+}
+
+label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+}
+
+select {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ccc;
+    border-radius: 7px;
+    font-size: 16px;
+}
+
+.buttons {
+    text-align: center;
+    margin: 25px 0;
+}
+
+button {
+    padding: 13px 20px;
+    margin: 5px;
+    border: none;
+    border-radius: 7px;
+    background: #1769aa;
+    color: white;
+    cursor: pointer;
+    font-size: 15px;
+}
+
+button:hover {
+    background: #104d80;
+}
+
+.stop {
+    background: #dc3545;
+}
+
+.clear {
+    background: #555;
+}
+
+#status {
+    text-align: center;
+    color: #1769aa;
+    font-weight: bold;
+    overflow-wrap: anywhere;
+}
+
+.output {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.output-box {
+    background: #f1f5f9;
+    padding: 20px;
+    border-radius: 10px;
+    min-height: 180px;
+    overflow-wrap: anywhere;
+}
+
+.output-box h3 {
+    color: #183b68;
+}
+
+.output-box p {
+    font-size: 18px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+}
+
+#translatedText {
+    color: #176b36;
+}
+
+@media(max-width: 650px) {
+    .output {
+        grid-template-columns: 1fr;
+    }
+
+    .container {
+        padding: 18px;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>🌍 Real-Time Speech Translation</h1>
+
+<p class="subtitle">
+Speak in one language and translate into another language instantly.
+</p>
+
+<div class="settings">
+
+<div>
+<label for="sourceLanguage">Speaking Language</label>
+
+<select id="sourceLanguage">
+<option value="rw-RW">Kinyarwanda</option>
+<option value="en-US">English</option>
+<option value="fr-FR">French</option>
+<option value="sw-KE">Swahili</option>
+</select>
+</div>
+
+<div>
+<label for="targetLanguage">Translation Language</label>
+
+<select id="targetLanguage">
+<option value="en">English</option>
+<option value="rw">Kinyarwanda</option>
+<option value="fr">French</option>
+<option value="sw">Swahili</option>
+</select>
+</div>
+
+</div>
+
+<div class="buttons">
+
+<button id="startButton" onclick="startListening()">
+🎤 Start Listening
+</button>
+
+<button class="stop" onclick="stopListening()">
+⏹ Stop
+</button>
+
+<button class="clear" onclick="clearText()">
+🗑 Clear
+</button>
+
+</div>
+
+<h3 id="status">Status: Ready</h3>
+
+<div class="output">
+
+<div class="output-box">
+<h3>🗣 Original Speech</h3>
+<p id="originalText">
+Your spoken words will appear here...
+</p>
+</div>
+
+<div class="output-box">
+<h3>🌍 Translated Text</h3>
+<p id="translatedText">
+Translation will appear here...
+</p>
+</div>
+
+</div>
+</div>
+
+<script>
+
+const SpeechRecognition =
+    window.SpeechRecognition ||
+    window.webkitSpeechRecognition;
+
+let recognition;
+let isListening = false;
+let finalText = "";
+let translationQueue = Promise.resolve();
+let sessionNumber = 0;
+
+const original = document.getElementById("originalText");
+const translated = document.getElementById("translatedText");
+const status = document.getElementById("status");
+
+const sourceLanguage =
+    document.getElementById("sourceLanguage");
+
+const targetLanguage =
+    document.getElementById("targetLanguage");
+
+function setStatus(message) {
+    status.innerText = "Status: " + message;
+}
+
+if (SpeechRecognition) {
+
+    recognition = new SpeechRecognition();
+
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onstart = function() {
+        setStatus("Listening...");
+    };
+
+    recognition.onresult = function(event) {
+
+        let temporaryText = "";
+
+        for (
+            let i = event.resultIndex;
+            i < event.results.length;
+            i++
+        ) {
+
+            const transcript =
+                event.results[i][0].transcript;
+
+            if (event.results[i].isFinal) {
+
+                finalText += transcript + " ";
+
+                original.innerText = finalText;
+
+                const languages = {
+                    source: sourceLanguage.value.split("-")[0],
+                    target: targetLanguage.value
+                };
+
+                const currentSession = sessionNumber;
+
+                translationQueue = translationQueue
+                    .then(() => {
+                        if (currentSession !== sessionNumber) return;
+
+                        return translateText(
+                            transcript,
+                            languages,
+                            currentSession
+                        );
+                    })
+                    .catch(error => {
+                        console.error(error);
+                    });
+
+            } else {
+
+                temporaryText += transcript;
+
+            }
+        }
+
+        if (temporaryText) {
+            original.innerText =
+                finalText + temporaryText;
+        }
+    };
+
+    recognition.onerror = function(event) {
+
+        if (event.error === "not-allowed") {
+            setStatus("Microphone permission denied.");
+        } else if (event.error === "no-speech") {
+            setStatus("No speech detected.");
+        } else {
+            setStatus("Speech error: " + event.error);
+        }
+    };
+
+    recognition.onend = function() {
+
+        if (isListening) {
+
+            try {
+                recognition.start();
+            } catch (error) {
+                setStatus("Restarting...");
+            }
+
+        } else {
+            setStatus("Stopped");
+        }
+    };
+
+} else {
+
+    setStatus(
+        "Speech recognition is not supported by this browser."
+    );
+
+}
+
+function startListening() {
+
+    if (!recognition) {
+        alert("Please use a browser that supports speech recognition.");
+        return;
+    }
+
+    if (
+        sourceLanguage.value.split("-")[0] ===
+        targetLanguage.value
+    ) {
+        alert("Choose two different languages.");
+        return;
+    }
+
+    if (isListening) return;
+
+    recognition.lang = sourceLanguage.value;
+
+    isListening = true;
+
+    try {
+        recognition.start();
+    } catch (error) {
+        isListening = false;
+        setStatus("Unable to start microphone.");
+    }
+}z
+
+function stopListening() {
+
+    isListening = false;
+
+    if (recognition) {
+        recognition.stop();
+    }
+
+    setStatus("Stopped");
+}
+
+async function translateText(
+    text,
+    languages,
+    currentSession
+) {
+
+    if (!text.trim()) return;
+
+    setStatus("Translating...");
+
+    try {
+
+        const response = await fetch("/translate", {
+
+            method: "POST",
+
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            },
+
+            body: JSON.stringify({
+                text: text,
+                source: languages.source,
+                target: languages.target
+            })
+
+        });
+
+        const contentType =
+            response.headers.get("content-type") || "";
+
+        if (!contentType.includes("application/json")) {
+            throw new Error(
+                "Backend did not return JSON. Check server.js."
+            );
+        }
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                data.error || "Translation failed."
+            );
+        }
+
+        if (!data.translation) {
+            throw new Error("No translation received.");
+        }
+
+        if (currentSession !== sessionNumber) return;
+
+        if (
+            translated.innerText ===
+            "Translation will appear here..."
+        ) {
+            translated.innerText = "";
+        }
+
+        translated.innerText +=
+            data.translation + " ";
+
+        setStatus(isListening ? "Listening..." : "Stopped");
+
+    } catch (error) {
+
+        console.error("Translation error:", error);
+
+        if (currentSession === sessionNumber) {
+            setStatus("Translation Error: " + error.message);
+        }
+    }
+}
+
+function clearText() {
+
+    sessionNumber++;
+
+    finalText = "";
+
+    translationQueue = Promise.resolve();
+
+    original.innerText = "";
+    translated.innerText = "";
+
+    setStatus("Ready");
+}
+
+</script>
+
+</body>
+</html>
